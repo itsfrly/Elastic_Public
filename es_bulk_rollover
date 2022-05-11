@@ -1,0 +1,68 @@
+from logging import basicConfig
+from operator import index
+from elasticsearch import Elasticsearch
+import time
+from getpass import getpass
+from datetime import datetime, timedelta, date
+
+
+elasticsearchEndpoint = input('ElasticSearch Endpoint URL:  ')
+username = input('Username:  ')
+password = getpass()
+indexPattern = input('Index Pattern:    ')
+minAge = input('Minimum Index Age to Rollover:  ')
+minAgeInt = int(minAge)
+    
+
+es = Elasticsearch(
+    elasticsearchEndpoint,
+    basic_auth=[username, password],
+)
+
+oldMetrics = []
+today = date.today()
+
+for indexCurrent in es.indices.get(index=indexPattern, expand_wildcards='all'):
+
+    indexDateObject = indexCurrent[-17:-7]
+    datetime_dateObject = datetime.strptime(indexDateObject, '%Y.%m.%d').date()
+    if today - datetime_dateObject > timedelta(days=minAgeInt):
+        #print(indexCurrent)
+        oldMetrics.append(indexCurrent)
+
+def dataStreamExtractor(metricList):
+    dataStreams = []
+    for metric in metricList:
+        counter = 0
+        indexCounter = 0
+        for x in metric :
+            indexCounter += 1
+            ds = []
+            if x == "-":
+                counter += 1
+
+            if counter == 0:
+                slice1 = indexCounter + 1
+
+            if counter == 3: 
+                slice2 = indexCounter
+        dataStreams.append(metric[slice1:slice2])
+    return dataStreams
+
+
+dataStreams = dataStreamExtractor(oldMetrics)
+response = input(f'Should I rollover {oldMetrics}? y/n:   ')
+
+if response == 'y':
+    print('Beginning operation')
+    for dataStream in dataStreams:
+        es.indices.rollover(alias=dataStream)
+        print(f'{dataStream} rolled over.')
+        time.sleep(3)
+    print('Operation completed.')
+
+elif response == 'n':
+    print('Operation declined by user.')
+
+else:
+    print('Invalid input. Please respond with "y" or "n"')
